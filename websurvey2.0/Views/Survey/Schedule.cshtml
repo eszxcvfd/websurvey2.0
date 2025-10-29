@@ -1,0 +1,165 @@
+﻿@model websurvey2._0.ViewModels.SurveyScheduleViewModel
+@{
+    ViewData["Title"] = "Survey Schedule";
+}
+
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">📅 Survey Schedule - @Model.SurveyTitle</h5>
+        </div>
+        <div class="card-body">
+            @if (TempData["ScheduleSuccess"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    @TempData["ScheduleSuccess"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <form asp-action="UpdateSchedule" method="post">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                
+                <input type="hidden" asp-for="SurveyId" />
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h6 class="card-title text-info">🟢 Open Time</h6>
+                                <div class="mb-3">
+                                    <label asp-for="OpenAtUtc" class="form-label">Open Date & Time (UTC)</label>
+                                    <input type="datetime-local" asp-for="OpenAtUtc" class="form-control" id="openAtInput" />
+                                    <span asp-validation-for="OpenAtUtc" class="text-danger"></span>
+                                    @if (Model.OpenAtLocal.HasValue)
+                                    {
+                                        <small class="text-muted">Local: @Model.OpenAtLocal.Value.ToString("g")</small>
+                                    }
+                                </div>
+                                <div class="form-text">
+                                    When should the survey become available to respondents?
+                                    Leave empty to open immediately.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card border-danger">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger">🔴 Close Time</h6>
+                                <div class="mb-3">
+                                    <label asp-for="CloseAtUtc" class="form-label">Close Date & Time (UTC)</label>
+                                    <input type="datetime-local" asp-for="CloseAtUtc" class="form-control" id="closeAtInput" />
+                                    <span asp-validation-for="CloseAtUtc" class="text-danger"></span>
+                                    @if (Model.CloseAtLocal.HasValue)
+                                    {
+                                        <small class="text-muted">Local: @Model.CloseAtLocal.Value.ToString("g")</small>
+                                    }
+                                </div>
+                                <div class="form-text">
+                                    When should the survey stop accepting responses?
+                                    Leave empty to keep open indefinitely.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-3">
+                    <div class="col-md-6">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h6 class="card-title text-warning">📊 Response Quota</h6>
+                                <div class="mb-3">
+                                    <label asp-for="ResponseQuota" class="form-label">Maximum Responses</label>
+                                    <input type="number" asp-for="ResponseQuota" class="form-control" min="1" placeholder="Unlimited" />
+                                    <span asp-validation-for="ResponseQuota" class="text-danger"></span>
+                                </div>
+                                <div class="form-text">
+                                    Maximum number of responses to accept. Leave empty for unlimited.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card border-secondary">
+                            <div class="card-body">
+                                <h6 class="card-title">⚙️ Quota Behavior</h6>
+                                <div class="mb-3">
+                                    <label asp-for="QuotaBehavior" class="form-label">When Quota Reached</label>
+                                    <select asp-for="QuotaBehavior" class="form-select">
+                                        <option value="">Select behavior...</option>
+                                        <option value="Close">Close survey</option>
+                                        <option value="ViewOnly">Allow viewing only</option>
+                                        <option value="Message">Show custom message</option>
+                                    </select>
+                                    <span asp-validation-for="QuotaBehavior" class="text-danger"></span>
+                                </div>
+                                <div class="form-text">
+                                    What happens when the response quota is reached?
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-4">
+                    <strong>ℹ️ Time Zone Information:</strong>
+                    <ul class="mb-0">
+                        <li>All times are stored in UTC (Coordinated Universal Time)</li>
+                        <li>Current UTC time: <strong id="currentUtc">@DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")</strong></li>
+                        <li>Your local time: <strong id="currentLocal">@DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</strong></li>
+                        <li>Close time must be after open time</li>
+                    </ul>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Update Schedule
+                    </button>
+                    <a class="btn btn-outline-secondary ms-2" asp-action="Settings" asp-route-id="@Model.SurveyId">
+                        <i class="bi bi-arrow-left"></i> Back to Settings
+                    </a>
+                    <a class="btn btn-outline-info ms-2" asp-action="My">
+                        <i class="bi bi-list"></i> My Surveys
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        // Update current time display every second
+        setInterval(function() {
+            document.getElementById('currentUtc').textContent = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            document.getElementById('currentLocal').textContent = new Date().toLocaleString('en-CA', { 
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
+            }).replace(',', '');
+        }, 1000);
+
+        // Validation: Ensure close date is after open date
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const openInput = document.getElementById('openAtInput');
+            const closeInput = document.getElementById('closeAtInput');
+            
+            if (openInput.value && closeInput.value) {
+                const openDate = new Date(openInput.value);
+                const closeDate = new Date(closeInput.value);
+                
+                if (closeDate <= openDate) {
+                    e.preventDefault();
+                    alert('Close date must be after open date.');
+                    closeInput.focus();
+                    return false;
+                }
+            }
+        });
+    </script>
+}

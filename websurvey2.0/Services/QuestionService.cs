@@ -13,6 +13,7 @@ public class QuestionService : IQuestionService
     private readonly ISurveyRepository _surveys;
     private readonly IActivityLogRepository _logs;
     private readonly IRoleService _roles;
+    private readonly IBranchLogicRepository _branchLogics; // NEW
     private readonly SurveyDbContext _db;
 
     public QuestionService(
@@ -21,6 +22,7 @@ public class QuestionService : IQuestionService
         ISurveyRepository surveys,
         IActivityLogRepository logs,
         IRoleService roles,
+        IBranchLogicRepository branchLogics, // NEW
         SurveyDbContext db)
     {
         _questions = questions;
@@ -28,6 +30,7 @@ public class QuestionService : IQuestionService
         _surveys = surveys;
         _logs = logs;
         _roles = roles;
+        _branchLogics = branchLogics; // NEW
         _db = db;
     }
 
@@ -41,6 +44,12 @@ public class QuestionService : IQuestionService
 
         var (allowed, error, _) = await _roles.CheckPermissionAsync(actingUserId, q.SurveyId, "EditQuestion", ct);
         if (!allowed) return (false, error ?? "Access denied.", null);
+
+        // Load all questions in survey for branching dropdown
+        var allQuestions = await _questions.GetBySurveyAsync(q.SurveyId, ct);
+
+        // NEW: Load existing branch logics
+        var existingLogics = await _branchLogics.GetBySourceQuestionAsync(questionId, ct);
 
         var vm = new QuestionEditViewModel
         {
@@ -61,7 +70,22 @@ public class QuestionService : IQuestionService
                     OptionValue = o.OptionValue,
                     OptionOrder = o.OptionOrder,
                     IsActive = o.IsActive
-                }).ToList()
+                }).ToList(),
+            // Populate available questions for branching (exclude current question)
+            AvailableQuestions = allQuestions
+                .Where(quest => quest.QuestionId != questionId)
+                .OrderBy(quest => quest.QuestionOrder)
+                .Select(quest => new QuestionSummaryViewModel
+                {
+                    QuestionId = quest.QuestionId,
+                    QuestionOrder = quest.QuestionOrder,
+                    QuestionText = quest.QuestionText,
+                    QuestionType = quest.QuestionType
+                }).ToList(),
+            // NEW: Populate existing branch logics
+            BranchLogics = existingLogics
+                .Select(bl => ParseBranchLogicToViewModel(bl))
+                .ToList()
         };
 
         // Parse ValidationRule as JSON if possible
@@ -94,7 +118,6 @@ public class QuestionService : IQuestionService
             }
             catch
             {
-                // ignore parse errors; treat as legacy regex text
                 vm.RegexPattern ??= q.ValidationRule;
             }
         }
@@ -124,6 +147,47 @@ public class QuestionService : IQuestionService
                 catch { }
             }
         }
+    }
+
+    // NEW: Helper to parse BranchLogic model to ViewModel
+    private static BranchLogicViewModel ParseBranchLogicToViewModel(BranchLogic bl)
+    {
+        var vm = new BranchLogicViewModel
+        {
+            LogicId = bl.LogicId,
+            SurveyId = bl.SurveyId,
+            SourceQuestionId = bl.SourceQuestionId,
+            ConditionExpr = bl.ConditionExpr,
+            TargetAction = bl.TargetAction,
+            TargetQuestionId = bl.TargetQuestionId,
+            PriorityOrder = bl.PriorityOrder
+        };
+
+        // Parse ConditionExpr JSON to populate operator/value/optionId
+        try
+        {
+            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(bl.ConditionExpr);
+            if (json != null)
+            {
+                if (json.TryGetValue("operator", out var opElem))
+                    vm.ConditionOperator = opElem.GetString() ?? "equals";
+
+                if (json.TryGetValue("value", out var valElem))
+                    vm.ConditionValue = valElem.GetString();
+
+                if (json.TryGetValue("optionId", out var optElem))
+                {
+                    if (Guid.TryParse(optElem.GetString(), out var optId))
+                        vm.ConditionOptionId = optId;
+                }
+            }
+        }
+        catch
+        {
+            // If parsing fails, keep default values
+        }
+
+        return vm;
     }
 
     public async Task<(bool Success, IEnumerable<string> Errors, Question? Question)> CreateAsync(Guid actingUserId, QuestionEditViewModel vm, CancellationToken ct = default)
@@ -180,6 +244,10 @@ public class QuestionService : IQuestionService
                 }
             }
 
+            // NEW: Save branch logics (Note: Only for Edit, not Create - since we need QuestionId first)
+            // Branch logics should only be added after question is created and has an ID
+            // So we don't process them here during Create
+
             await _logs.AddAsync(new ActivityLog
             {
                 UserId = actingUserId,
@@ -220,12 +288,12 @@ public class QuestionService : IQuestionService
             q.ValidationRule = BuildConfigJson(vm);
             q.UpdatedAtUtc = DateTime.UtcNow;
 
+            // Update options
             if (RequiresOptions(q.QuestionType))
             {
                 var existing = q.QuestionOptions.ToDictionary(o => o.OptionId);
                 var posted = NormalizeOptions(vm.Options).ToList();
 
-                // update/add
                 foreach (var (p, order) in posted)
                 {
                     if (p.OptionId.HasValue && existing.TryGetValue(p.OptionId.Value, out var ex))
@@ -249,7 +317,6 @@ public class QuestionService : IQuestionService
                     }
                 }
 
-                // remove deleted
                 var keepIds = posted.Where(x => x.Item1.OptionId.HasValue).Select(x => x.Item1.OptionId!.Value).ToHashSet();
                 foreach (var ex in existing.Values)
                 {
@@ -261,12 +328,14 @@ public class QuestionService : IQuestionService
             }
             else
             {
-                // non-option type -> remove any existing options
                 foreach (var ex in q.QuestionOptions.ToList())
                 {
                     await _options.RemoveAsync(ex, ct);
                 }
             }
+
+            // NEW: Update branch logics
+            await UpdateBranchLogicsAsync(vm.QuestionId.Value, vm.SurveyId, vm.BranchLogics, ct);
 
             await _logs.AddAsync(new ActivityLog
             {
@@ -280,10 +349,67 @@ public class QuestionService : IQuestionService
             await tx.CommitAsync(ct);
             return (true, Array.Empty<string>());
         }
-        catch
+        catch (Exception ex)
         {
             await tx.RollbackAsync(ct);
-            return (false, new[] { "Update question failed." });
+            return (false, new[] { $"Update question failed: {ex.Message}" });
+        }
+    }
+
+    // NEW: Helper method to update branch logics
+    private async Task UpdateBranchLogicsAsync(Guid questionId, Guid surveyId, List<BranchLogicViewModel> branchLogics, CancellationToken ct)
+    {
+        // Get existing branch logics
+        var existingLogics = await _branchLogics.GetBySourceQuestionAsync(questionId, ct);
+        var existingDict = existingLogics.ToDictionary(bl => bl.LogicId);
+
+        // Filter valid branch logics (must have ConditionExpr)
+        var validLogics = branchLogics
+            .Where(bl => !string.IsNullOrWhiteSpace(bl.ConditionExpr))
+            .ToList();
+
+        // Update or add
+        foreach (var blVm in validLogics)
+        {
+            if (blVm.LogicId.HasValue && existingDict.TryGetValue(blVm.LogicId.Value, out var existing))
+            {
+                // Update existing
+                existing.ConditionExpr = blVm.ConditionExpr.Trim();
+                existing.TargetAction = blVm.TargetAction.Trim();
+                existing.TargetQuestionId = blVm.TargetQuestionId;
+                existing.PriorityOrder = blVm.PriorityOrder;
+                await _branchLogics.UpdateAsync(existing, ct);
+            }
+            else
+            {
+                // Add new
+                var newLogic = new BranchLogic
+                {
+                    LogicId = Guid.NewGuid(),
+                    SurveyId = surveyId,
+                    SourceQuestionId = questionId,
+                    ConditionExpr = blVm.ConditionExpr.Trim(),
+                    TargetAction = blVm.TargetAction.Trim(),
+                    TargetQuestionId = blVm.TargetQuestionId,
+                    PriorityOrder = blVm.PriorityOrder,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                await _branchLogics.AddAsync(newLogic, ct);
+            }
+        }
+
+        // Remove deleted logics
+        var keepIds = validLogics
+            .Where(bl => bl.LogicId.HasValue)
+            .Select(bl => bl.LogicId!.Value)
+            .ToHashSet();
+
+        foreach (var existing in existingLogics)
+        {
+            if (!keepIds.Contains(existing.LogicId))
+            {
+                await _branchLogics.RemoveAsync(existing, ct);
+            }
         }
     }
 

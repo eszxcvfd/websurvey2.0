@@ -11,6 +11,6 @@ public interface IQuestionService
     Task<(bool Success, IEnumerable<string> Errors)> DeleteAsync(Guid actingUserId, Guid questionId, CancellationToken ct = default);
     Task<(bool Success, IEnumerable<string> Errors)> ReorderAsync(Guid actingUserId, Guid surveyId, IReadOnlyList<Guid> orderedQuestionIds, CancellationToken ct = default);
 
-    // New: load VM for editing with config parsed back from JSON
+    // Load VM for editing with config parsed back from JSON
     Task<(bool Success, string? Error, QuestionEditViewModel? Vm)> GetForEditAsync(Guid actingUserId, Guid questionId, CancellationToken ct = default);
 }

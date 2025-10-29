@@ -147,12 +147,13 @@ public class RoleService : IRoleService
         int rank = RoleRank.TryGetValue(effectiveRole, out var r) ? r : 0;
         int required = action switch
         {
-            "EditQuestion"   => RoleRank["Editor"],
-            "Publish"        => RoleRank["Owner"],   // chỉ Owner
-            "ViewReport"     => RoleRank["Viewer"],  // Viewer trở lên
-            "ManageSettings" => RoleRank["Owner"],   // NEW: Settings chỉ Owner
-            "Settings"       => RoleRank["Owner"],   // alias
-            _                => RoleRank["Viewer"]
+            "EditQuestion"   => RoleRank["Editor"],   // Editor trở lên (rank >= 2)
+            "EditSurvey"     => RoleRank["Owner"],    // Chỉ Owner (rank >= 4)
+            "Publish"        => RoleRank["Owner"],    // Chỉ Owner (rank >= 4)
+            "ViewReport"     => RoleRank["Viewer"],   // Viewer trở lên (rank >= 1)
+            "ManageSettings" => RoleRank["Owner"],    // Chỉ Owner (rank >= 4)
+            "Settings"       => RoleRank["Owner"],    // Alias cho ManageSettings
+            _                => RoleRank["Viewer"]    // Default: Viewer
         };
 
         if (rank >= required) return (true, null, effectiveRole);

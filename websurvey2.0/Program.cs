@@ -40,6 +40,17 @@ builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
 builder.Services.AddScoped<IQuestionOptionRepository, QuestionOptionRepository>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 
+// Add these registrations if not already present
+builder.Services.AddScoped<IBranchLogicRepository, BranchLogicRepository>();
+builder.Services.AddScoped<IBranchLogicService, BranchLogicService>();
+
+// Add these registrations
+builder.Services.AddScoped<ISurveyChannelRepository, SurveyChannelRepository>();
+builder.Services.AddScoped<IPublishService, PublishService>();
+
+// Required for QR code generation
+builder.Services.AddHttpContextAccessor();
+
 // Email service
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();

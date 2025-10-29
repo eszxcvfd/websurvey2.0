@@ -1,4 +1,4 @@
-@model websurvey2._0.ViewModels.QuestionEditViewModel
+﻿@model websurvey2._0.ViewModels.QuestionEditViewModel
 @{
     ViewData["Title"] = Model.QuestionId.HasValue ? "Edit Question" : "Create Question";
 }
@@ -190,6 +190,108 @@
                     <small class="text-muted">Use Bulk add to paste lines and create many options quickly.</small>
                 </div>
 
+                @* NEW: Branching Logic Section *@
+                @if (Model.QuestionId.HasValue)
+                {
+                    <div class="card border-info mb-3">
+                        <div class="card-header bg-info bg-opacity-10">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">⚡ Branching Logic</h6>
+                                <button class="btn btn-sm btn-info" type="button" id="addBranchBtn">
+                                    <i class="bi bi-plus-circle"></i> Add Branch Rule
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="branchLogicsContainer">
+                                @if (Model.BranchLogics.Count == 0)
+                                {
+                                    <p class="text-muted mb-0">No branching logic configured. Add rules to control survey flow.</p>
+                                }
+                                else
+                                {
+                                    @for (int i = 0; i < Model.BranchLogics.Count; i++)
+                                    {
+                                        var bl = Model.BranchLogics[i];
+                                        <div class="branch-logic-row mb-3 p-3 border rounded" data-index="@i">
+                                            <input type="hidden" name="BranchLogics[@i].LogicId" value="@bl.LogicId" />
+                                            <input type="hidden" name="BranchLogics[@i].SurveyId" value="@bl.SurveyId" />
+                                            <input type="hidden" name="BranchLogics[@i].SourceQuestionId" value="@bl.SourceQuestionId" />
+                                            <input type="hidden" name="BranchLogics[@i].ConditionExpr" class="condition-expr-hidden" value="@bl.ConditionExpr" />
+                                            
+                                            <div class="row g-3 mb-2">
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Condition Operator</label>
+                                                    <select name="BranchLogics[@i].ConditionOperator" class="form-select condition-operator" data-index="@i">
+                                                        <option value="equals">Equals</option>
+                                                        <option value="notEquals">Not Equals</option>
+                                                        <option value="contains">Contains</option>
+                                                        <option value="greaterThan">Greater Than</option>
+                                                        <option value="lessThan">Less Than</option>
+                                                        <option value="optionSelected">Option Selected</option>
+                                                        <option value="answered">Is Answered</option>
+                                                        <option value="notAnswered">Is Not Answered</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3 condition-value-col">
+                                                    <label class="form-label">Condition Value</label>
+                                                    <input type="text" name="BranchLogics[@i].ConditionValue" class="form-control condition-value" placeholder="Enter value" value="@bl.ConditionValue" />
+                                                    <small class="text-muted">Text or number to compare</small>
+                                                </div>
+                                                <div class="col-md-3 condition-option-col d-none">
+                                                    <label class="form-label">Select Option</label>
+                                                    <select name="BranchLogics[@i].ConditionOptionId" class="form-select condition-option">
+                                                        <option value="">-- Select Option --</option>
+                                                        @foreach (var opt in Model.Options.Where(o => o.IsActive))
+                                                        {
+                                                            <option value="@opt.OptionId" selected="@(bl.ConditionOptionId == opt.OptionId)">@opt.OptionText</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Action</label>
+                                                    <select name="BranchLogics[@i].TargetAction" class="form-select target-action">
+                                                        <option value="SkipTo" selected="@(bl.TargetAction == "SkipTo")">Skip to Question</option>
+                                                        <option value="EndSurvey" selected="@(bl.TargetAction == "EndSurvey")">End Survey</option>
+                                                        <option value="ShowQuestion" selected="@(bl.TargetAction == "ShowQuestion")">Show Question</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="row g-3">
+                                                <div class="col-md-5 target-question-col">
+                                                    <label class="form-label">Target Question</label>
+                                                    <select name="BranchLogics[@i].TargetQuestionId" class="form-select target-question-select">
+                                                        <option value="">-- Select Question or End Survey --</option>
+                                                        @foreach (var q in Model.AvailableQuestions)
+                                                        {
+                                                            <option value="@q.QuestionId" selected="@(bl.TargetQuestionId == q.QuestionId)">
+                                                                Q@(q.QuestionOrder): @(q.QuestionText.Length > 60 ? q.QuestionText.Substring(0, 60) + "..." : q.QuestionText)
+                                                            </option>
+                                                        }
+                                                    </select>
+                                                    <small class="text-muted">Leave empty if action is "End Survey"</small>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Priority</label>
+                                                    <input type="number" name="BranchLogics[@i].PriorityOrder" class="form-control" value="@bl.PriorityOrder" min="1" />
+                                                </div>
+                                                <div class="col-md-1 d-flex align-items-end">
+                                                    <button type="button" class="btn btn-outline-danger remove-branch-btn w-100">×</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                            
+                            @* Hidden data for JavaScript to build question dropdown *@
+                            <script id="availableQuestionsData" type="application/json">
+                                @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AvailableQuestions))
+                            </script>
+                        </div>
+                    </div>
+                }
+
                 <div class="mt-4">
                     <button type="submit" class="btn btn-primary">@ViewData["Title"]</button>
                     <a class="btn btn-outline-secondary ms-2" asp-action="Index" asp-route-surveyId="@Model.SurveyId">Back</a>
@@ -202,4 +304,5 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script src="~/js/question/edit.js" asp-append-version="true"></script>
+    <script src="~/js/question/branch-logic.js" asp-append-version="true"></script>
 }

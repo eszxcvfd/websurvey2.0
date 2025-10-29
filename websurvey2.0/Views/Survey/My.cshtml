@@ -15,6 +15,21 @@
         </div>
     </div>
 
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
     <div class="card shadow-sm mb-4">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -42,11 +57,76 @@
                         {
                             <tr>
                                 <td>@s.Title</td>
-                                <td><span class="badge bg-secondary">@s.Status</span></td>
+                                <td>
+                                    @if (s.Status == "Draft")
+                                    {
+                                        <span class="badge bg-secondary">@s.Status</span>
+                                    }
+                                    else if (s.Status == "Published")
+                                    {
+                                        <span class="badge bg-success">@s.Status</span>
+                                    }
+                                    else if (s.Status == "Closed")
+                                    {
+                                        <span class="badge bg-danger">@s.Status</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@s.Status</span>
+                                    }
+                                </td>
                                 <td>@s.CreatedAtUtc.ToLocalTime().ToString("g")</td>
                                 <td class="text-end">
-                                    <a class="btn btn-outline-primary btn-sm me-2" asp-action="Settings" asp-route-id="@s.SurveyId">Settings</a>
-                                    <a class="btn btn-outline-secondary btn-sm" asp-action="ShareAccess" asp-route-id="@s.SurveyId">Manage access</a>
+                                    <a class="btn btn-outline-primary btn-sm me-2" asp-action="Settings" asp-route-id="@s.SurveyId">
+                                        <i class="bi bi-gear"></i> Settings
+                                    </a>
+                                    <a class="btn btn-outline-secondary btn-sm me-2" asp-action="ShareAccess" asp-route-id="@s.SurveyId">
+                                        <i class="bi bi-people"></i> Manage access
+                                    </a>
+                                    
+                                    @* Show Get Links button for Published surveys *@
+                                    @if (s.Status == "Published")
+                                    {
+                                        <a class="btn btn-outline-info btn-sm me-2" asp-controller="Publish" asp-action="Links" asp-route-surveyId="@s.SurveyId" title="Get Survey Links & QR Codes">
+                                            <i class="bi bi-link-45deg"></i> Get Links
+                                        </a>
+                                    }
+                                    
+                                    @* Show Publish button only for Draft surveys *@
+                                    @if (s.Status == "Draft")
+                                    {
+                                        <form asp-action="Publish" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to publish this survey? Once published, it will be available to respondents.');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@s.SurveyId" />
+                                            <button type="submit" class="btn btn-success btn-sm" title="Publish Survey">
+                                                <i class="bi bi-rocket-takeoff"></i> Publish
+                                            </button>
+                                        </form>
+                                    }
+                                    
+                                    @* Show Close button only for Published surveys *@
+                                    @if (s.Status == "Published")
+                                    {
+                                        <form asp-action="Close" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to close this survey? Once closed, it will no longer accept responses.');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@s.SurveyId" />
+                                            <button type="submit" class="btn btn-danger btn-sm" title="Close Survey">
+                                                <i class="bi bi-lock-fill"></i> Close
+                                            </button>
+                                        </form>
+                                    }
+                                    
+                                    @* Show Reopen button only for Closed surveys *@
+                                    @if (s.Status == "Closed")
+                                    {
+                                        <form asp-action="Reopen" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to reopen this survey? It will start accepting responses again.');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@s.SurveyId" />
+                                            <button type="submit" class="btn btn-warning btn-sm" title="Reopen Survey">
+                                                <i class="bi bi-unlock-fill"></i> Reopen
+                                            </button>
+                                        </form>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -98,15 +178,45 @@
                                         <span class="badge bg-secondary">Viewer</span>
                                     }
                                 </td>
-                                <td><span class="badge bg-secondary">@s.Status</span></td>
+                                <td>
+                                    @if (s.Status == "Draft")
+                                    {
+                                        <span class="badge bg-secondary">@s.Status</span>
+                                    }
+                                    else if (s.Status == "Published")
+                                    {
+                                        <span class="badge bg-success">@s.Status</span>
+                                    }
+                                    else if (s.Status == "Closed")
+                                    {
+                                        <span class="badge bg-danger">@s.Status</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@s.Status</span>
+                                    }
+                                </td>
                                 <td><code>@s.OwnerId</code></td>
                                 <td>@s.CreatedAtUtc.ToLocalTime().ToString("g")</td>
                                 <td class="text-end">
-                                    @* Ví dụ nút chỉ hiện nếu đủ quyền (client-side). Backend vẫn phải kiểm tra bằng CheckPermission *@
+                                    @* Show Get Links button for Published surveys *@
+                                    @if (s.Status == "Published")
+                                    {
+                                        <a class="btn btn-outline-info btn-sm me-2" asp-controller="Publish" asp-action="Links" asp-route-surveyId="@s.SurveyId" title="Get Survey Links & QR Codes">
+                                            <i class="bi bi-link-45deg"></i> Get Links
+                                        </a>
+                                    }
+                                    
+                                    @* Chỉ hiện nút Edit nếu là Admin hoặc Owner (không cho Editor) *@
+                                    @if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <a class="btn btn-outline-primary btn-sm me-2" asp-controller="Survey" asp-action="Settings" asp-route-id="@s.SurveyId">Edit Survey</a>
+                                    }
+                                    @* Editor có thể chỉnh sửa câu hỏi *@
                                     @if (string.Equals(role, "Editor", StringComparison.OrdinalIgnoreCase)
                                          || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        <a class="btn btn-outline-primary btn-sm" asp-controller="Survey" asp-action="Edit" asp-route-id="@s.SurveyId">Edit</a>
+                                        <a class="btn btn-outline-info btn-sm me-2" asp-controller="Question" asp-action="Index" asp-route-surveyId="@s.SurveyId">Edit Questions</a>
                                     }
                                     <a class="btn btn-outline-secondary btn-sm" asp-controller="Survey" asp-action="Report" asp-route-id="@s.SurveyId">Report</a>
                                 </td>

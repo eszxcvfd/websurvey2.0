@@ -86,6 +86,72 @@ public class SurveyController : Controller
         return RedirectToAction(nameof(Settings), new { id = vm.SurveyId });
     }
 
+    // NEW: GET Schedule page
+    [HttpGet]
+    public async Task<IActionResult> Schedule(Guid id, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId))
+            return RedirectToAction("Login", "Auth");
+
+        var (allowed, _, _) = await _roles.CheckPermissionAsync(userId, id, "ManageSettings", ct);
+        if (!allowed) return Forbid();
+
+        var s = await _surveys.GetByIdAsync(id, ct);
+        if (s is null) return NotFound();
+
+        var vm = new SurveyScheduleViewModel
+        {
+            SurveyId = s.SurveyId,
+            SurveyTitle = s.Title,
+            OpenAtUtc = s.OpenAtUtc,
+            CloseAtUtc = s.CloseAtUtc,
+            ResponseQuota = s.ResponseQuota,
+            QuotaBehavior = s.QuotaBehavior
+        };
+
+        return View(vm);
+    }
+
+    // NEW: POST Update schedule
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateSchedule([FromForm] SurveyScheduleViewModel vm, CancellationToken ct)
+    {
+        var isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+
+        if (!TryGetUserId(out var userId))
+        {
+            if (isAjax) return Unauthorized(new { success = false, errors = new[] { "Unauthorized" } });
+            return RedirectToAction("Login", "Auth");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var errs = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToArray();
+            if (isAjax) return BadRequest(new { success = false, errors = errs });
+            return View("Schedule", vm);
+        }
+
+        var (allowed, _, _) = await _roles.CheckPermissionAsync(userId, vm.SurveyId, "ManageSettings", ct);
+        if (!allowed)
+        {
+            if (isAjax) return Forbid();
+            return Forbid();
+        }
+
+        var (success, errors) = await _surveyService.UpdateScheduleAsync(vm.SurveyId, userId, vm, ct);
+        if (!success)
+        {
+            if (isAjax) return BadRequest(new { success = false, errors });
+            foreach (var err in errors) ModelState.AddModelError(string.Empty, err);
+            return View("Schedule", vm);
+        }
+
+        if (isAjax) return Ok(new { success = true, message = "Schedule updated." });
+        TempData["ScheduleSuccess"] = "Schedule updated successfully.";
+        return RedirectToAction(nameof(Schedule), new { id = vm.SurveyId });
+    }
+
     [HttpGet]
     public async Task<IActionResult> My(CancellationToken ct)
     {
@@ -236,17 +302,79 @@ public class SurveyController : Controller
         TempData["CreateSurveySuccess"] = "Survey created as Draft.";
         return RedirectToAction("Index", "Home");
     }
+
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Publish(Guid id, CancellationToken ct)
     {
-        if (!Guid.TryParse(HttpContext.Session.GetString("UserId"), out var userId))
+        if (!TryGetUserId(out var userId))
             return RedirectToAction("Login", "Auth");
 
-        var (allowed, error, role) = await _roles.CheckPermissionAsync(userId, id, "Publish", ct);
+        var (allowed, errors, role) = await _roles.CheckPermissionAsync(userId, id, "Publish", ct);
         if (!allowed)
-            return Forbid(); // hoặc return Unauthorized/BadRequest tùy policy
+        {
+            TempData["Error"] = string.Join(", ", errors);
+            return RedirectToAction("My");
+        }
 
-        // ... thực hiện publish ...
-        return RedirectToAction("My", "Survey");
+        var (success, publishErrors) = await _surveyService.PublishSurveyAsync(id, userId, ct);
+        if (!success)
+        {
+            TempData["Error"] = string.Join(", ", publishErrors);
+            return RedirectToAction("My");
+        }
+
+        TempData["Success"] = "Survey published successfully!";
+        return RedirectToAction("My");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Close(Guid id, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId))
+            return RedirectToAction("Login", "Auth");
+
+        var (allowed, errors, role) = await _roles.CheckPermissionAsync(userId, id, "Publish", ct);
+        if (!allowed)
+        {
+            TempData["Error"] = string.Join(", ", errors);
+            return RedirectToAction("My");
+        }
+
+        var (success, closeErrors) = await _surveyService.CloseSurveyAsync(id, userId, ct);
+        if (!success)
+        {
+            TempData["Error"] = string.Join(", ", closeErrors);
+            return RedirectToAction("My");
+        }
+
+        TempData["Success"] = "Survey closed successfully!";
+        return RedirectToAction("My");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reopen(Guid id, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId))
+            return RedirectToAction("Login", "Auth");
+
+        var (allowed, errors, role) = await _roles.CheckPermissionAsync(userId, id, "Publish", ct);
+        if (!allowed)
+        {
+            TempData["Error"] = string.Join(", ", errors);
+            return RedirectToAction("My");
+        }
+
+        var (success, reopenErrors) = await _surveyService.ReopenSurveyAsync(id, userId, ct);
+        if (!success)
+        {
+            TempData["Error"] = string.Join(", ", reopenErrors);
+            return RedirectToAction("My");
+        }
+
+        TempData["Success"] = "Survey reopened successfully!";
+        return RedirectToAction("My");
     }
 }

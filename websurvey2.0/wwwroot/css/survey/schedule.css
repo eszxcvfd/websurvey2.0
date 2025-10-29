@@ -1,0 +1,48 @@
+/* Survey Schedule Styling */
+.card {
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+.card-header {
+    border-bottom: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.border-info { border-width: 2px !important; }
+.border-danger { border-width: 2px !important; }
+.border-warning { border-width: 2px !important; }
+.border-secondary { border-width: 2px !important; }
+
+.form-text {
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+input[type="datetime-local"] {
+    cursor: pointer;
+}
+
+.alert-info {
+    background-color: #e7f3ff;
+    border-color: #b6d4fe;
+}
+
+.btn-outline-primary {
+    color: #0d6efd;
+    background-color: transparent;
+    background-image: none;
+    border-color: #0d6efd;
+}
+
+.btn-outline-primary:hover {
+    color: #fff;
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.bi-calendar3 {
+    margin-right: 0.5rem;
+}

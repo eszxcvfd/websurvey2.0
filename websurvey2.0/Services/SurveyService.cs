@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using websurvey2._0.Models;
 using websurvey2._0.Repositories;
 using websurvey2._0.ViewModels;
@@ -95,6 +96,276 @@ public class SurveyService : ISurveyService
         {
             await tx.RollbackAsync(ct);
             return (false, new[] { "Update settings failed. Please try again later." });
+        }
+    }
+
+    // NEW: Set open/close time
+    public async Task<(bool Success, IEnumerable<string> Errors)> SetOpenCloseTimeAsync(
+        Guid surveyId,
+        Guid actingUserId,
+        DateTime? openAtUtc,
+        DateTime? closeAtUtc,
+        CancellationToken ct = default)
+    {
+        var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
+        if (survey is null) return (false, new[] { "Survey not found." });
+
+        // Validation: Close date must be after open date
+        if (openAtUtc.HasValue && closeAtUtc.HasValue && closeAtUtc.Value <= openAtUtc.Value)
+        {
+            return (false, new[] { "Close date must be after open date." });
+        }
+
+        // Validation: Cannot set dates in the past (optional, depending on requirements)
+        var now = DateTime.UtcNow;
+        if (openAtUtc.HasValue && openAtUtc.Value < now.AddMinutes(-5)) // 5 minutes tolerance
+        {
+            return (false, new[] { "Open date cannot be in the past." });
+        }
+
+        if (closeAtUtc.HasValue && closeAtUtc.Value < now.AddMinutes(-5))
+        {
+            return (false, new[] { "Close date cannot be in the past." });
+        }
+
+        using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            survey.OpenAtUtc = openAtUtc;
+            survey.CloseAtUtc = closeAtUtc;
+            survey.UpdatedAtUtc = DateTime.UtcNow;
+
+            var detail = $"Schedule updated. Open={(openAtUtc?.ToString("o") ?? "N/A")}, Close={(closeAtUtc?.ToString("o") ?? "N/A")}";
+            await _logs.AddAsync(new ActivityLog
+            {
+                UserId = actingUserId,
+                SurveyId = survey.SurveyId,
+                ActionType = "SurveyScheduleUpdated",
+                ActionDetail = detail
+            }, ct);
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (true, Array.Empty<string>());
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            return (false, new[] { "Update schedule failed. Please try again later." });
+        }
+    }
+
+    // NEW: Update full schedule including quota
+    public async Task<(bool Success, IEnumerable<string> Errors)> UpdateScheduleAsync(
+        Guid surveyId,
+        Guid actingUserId,
+        SurveyScheduleViewModel vm,
+        CancellationToken ct = default)
+    {
+        var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
+        if (survey is null) return (false, new[] { "Survey not found." });
+
+        // Validation: Close date must be after open date
+        if (vm.OpenAtUtc.HasValue && vm.CloseAtUtc.HasValue && vm.CloseAtUtc.Value <= vm.OpenAtUtc.Value)
+        {
+            return (false, new[] { "Close date must be after open date." });
+        }
+
+        // Validation: Dates cannot be in the past
+        var now = DateTime.UtcNow;
+        if (vm.OpenAtUtc.HasValue && vm.OpenAtUtc.Value < now.AddMinutes(-5))
+        {
+            return (false, new[] { "Open date cannot be in the past." });
+        }
+
+        if (vm.CloseAtUtc.HasValue && vm.CloseAtUtc.Value < now.AddMinutes(-5))
+        {
+            return (false, new[] { "Close date cannot be in the past." });
+        }
+
+        // Validation: Response quota must be positive if provided
+        if (vm.ResponseQuota.HasValue && vm.ResponseQuota.Value < 1)
+        {
+            return (false, new[] { "Response quota must be at least 1." });
+        }
+
+        using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            survey.OpenAtUtc = vm.OpenAtUtc;
+            survey.CloseAtUtc = vm.CloseAtUtc;
+            survey.ResponseQuota = vm.ResponseQuota;
+            survey.QuotaBehavior = string.IsNullOrWhiteSpace(vm.QuotaBehavior) ? null : vm.QuotaBehavior.Trim();
+            survey.UpdatedAtUtc = DateTime.UtcNow;
+
+            var detail = $"Schedule updated. Open={(vm.OpenAtUtc?.ToString("o") ?? "N/A")}, " +
+                        $"Close={(vm.CloseAtUtc?.ToString("o") ?? "N/A")}, " +
+                        $"Quota={(vm.ResponseQuota?.ToString() ?? "N/A")}, " +
+                        $"Behavior={(vm.QuotaBehavior ?? "N/A")}";
+
+            await _logs.AddAsync(new ActivityLog
+            {
+                UserId = actingUserId,
+                SurveyId = survey.SurveyId,
+                ActionType = "SurveyScheduleUpdated",
+                ActionDetail = detail
+            }, ct);
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (true, Array.Empty<string>());
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            return (false, new[] { "Update schedule failed. Please try again later." });
+        }
+    }
+
+    // NEW: Publish survey
+    public async Task<(bool Success, IEnumerable<string> Errors)> PublishSurveyAsync(
+        Guid surveyId,
+        Guid actingUserId,
+        CancellationToken ct = default)
+    {
+        var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
+        if (survey is null) return (false, new[] { "Survey not found." });
+
+        // Validation: Cannot publish if already published or closed
+        if (survey.Status == "Published")
+        {
+            return (false, new[] { "Survey is already published." });
+        }
+
+        if (survey.Status == "Closed")
+        {
+            return (false, new[] { "Cannot publish a closed survey." });
+        }
+
+        // Validation: Must have at least one question (optional - depends on your requirements)
+        var hasQuestions = await _db.Questions.AnyAsync(q => q.SurveyId == surveyId, ct);
+        if (!hasQuestions)
+        {
+            return (false, new[] { "Cannot publish survey without questions." });
+        }
+
+        using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            survey.Status = "Published";
+            survey.UpdatedAtUtc = DateTime.UtcNow;
+            
+            // If no open date is set, set it to now
+            if (!survey.OpenAtUtc.HasValue)
+            {
+                survey.OpenAtUtc = DateTime.UtcNow;
+            }
+
+            await _logs.AddAsync(new ActivityLog
+            {
+                UserId = actingUserId,
+                SurveyId = survey.SurveyId,
+                ActionType = "SurveyPublished",
+                ActionDetail = $"Survey published. Title='{survey.Title}', OpenAt={(survey.OpenAtUtc?.ToString("o") ?? "N/A")}"
+            }, ct);
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (true, Array.Empty<string>());
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            return (false, new[] { "Publish survey failed. Please try again later." });
+        }
+    }
+
+    // NEW: Close survey
+    public async Task<(bool Success, IEnumerable<string> Errors)> CloseSurveyAsync(
+        Guid surveyId,
+        Guid actingUserId,
+        CancellationToken ct = default)
+    {
+        var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
+        if (survey is null) return (false, new[] { "Survey not found." });
+
+        // Validation: Cannot close if not published
+        if (survey.Status != "Published")
+        {
+            return (false, new[] { "Only published surveys can be closed." });
+        }
+
+        using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            survey.Status = "Closed";
+            survey.UpdatedAtUtc = DateTime.UtcNow;
+            
+            // Set close date to now if not already set
+            if (!survey.CloseAtUtc.HasValue)
+            {
+                survey.CloseAtUtc = DateTime.UtcNow;
+            }
+
+            await _logs.AddAsync(new ActivityLog
+            {
+                UserId = actingUserId,
+                SurveyId = survey.SurveyId,
+                ActionType = "SurveyClosed",
+                ActionDetail = $"Survey closed. Title='{survey.Title}', ClosedAt={survey.CloseAtUtc?.ToString("o")}"
+            }, ct);
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (true, Array.Empty<string>());
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            return (false, new[] { "Close survey failed. Please try again later." });
+        }
+    }
+
+    // NEW: Reopen survey
+    public async Task<(bool Success, IEnumerable<string> Errors)> ReopenSurveyAsync(
+        Guid surveyId,
+        Guid actingUserId,
+        CancellationToken ct = default)
+    {
+        var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
+        if (survey is null) return (false, new[] { "Survey not found." });
+
+        // Validation: Can only reopen closed surveys
+        if (survey.Status != "Closed")
+        {
+            return (false, new[] { "Only closed surveys can be reopened." });
+        }
+
+        using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            survey.Status = "Published";
+            survey.UpdatedAtUtc = DateTime.UtcNow;
+            
+            // Clear the close date when reopening
+            survey.CloseAtUtc = null;
+
+            await _logs.AddAsync(new ActivityLog
+            {
+                UserId = actingUserId,
+                SurveyId = survey.SurveyId,
+                ActionType = "SurveyReopened",
+                ActionDetail = $"Survey reopened. Title='{survey.Title}', ReopenedAt={DateTime.UtcNow:o}"
+            }, ct);
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (true, Array.Empty<string>());
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            return (false, new[] { "Reopen survey failed. Please try again later." });
         }
     }
 }
