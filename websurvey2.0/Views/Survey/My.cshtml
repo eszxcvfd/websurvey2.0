@@ -1,0 +1,125 @@
+﻿@model websurvey2._0.ViewModels.MySurveysViewModel
+@{
+    ViewData["Title"] = "My Surveys";
+}
+<link rel="stylesheet" href="~/css/survey/my.css" asp-append-version="true" />
+
+<div class="my-container">
+    <div class="card shadow-sm mb-4">
+        <div class="card-body d-flex align-items-center justify-content-between flex-wrap">
+            <div>
+                <div class="text-muted small">Your User ID</div>
+                <code id="userIdText">@Model.CurrentUserId</code>
+            </div>
+            <button class="btn btn-outline-primary btn-sm" id="copyUserIdBtn">Copy</button>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Owned by you</h5>
+                <a class="btn btn-primary" asp-controller="Survey" asp-action="Create">Create Survey</a>
+            </div>
+            @if (Model.Surveys.Count == 0)
+            {
+                <div class="text-muted">You haven't created any surveys yet.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var s in Model.Surveys)
+                        {
+                            <tr>
+                                <td>@s.Title</td>
+                                <td><span class="badge bg-secondary">@s.Status</span></td>
+                                <td>@s.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                                <td class="text-end">
+                                    <a class="btn btn-outline-primary btn-sm me-2" asp-action="Settings" asp-route-id="@s.SurveyId">Settings</a>
+                                    <a class="btn btn-outline-secondary btn-sm" asp-action="ShareAccess" asp-route-id="@s.SurveyId">Manage access</a>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="mb-3">Shared with you</h5>
+            @if (Model.SharedSurveys.Count == 0)
+            {
+                <div class="text-muted">No shared surveys.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Your role</th>
+                                <th>Status</th>
+                                <th>Owner</th>
+                                <th>Created</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var s in Model.SharedSurveys)
+                        {
+                            var role = Model.SharedRoles.TryGetValue(s.SurveyId, out var r) ? r : "Viewer";
+                            <tr>
+                                <td>@s.Title</td>
+                                <td>
+                                    @if (string.Equals(role, "Editor", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-info text-dark">Editor</span>
+                                    }
+                                    else if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-warning text-dark">Admin</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Viewer</span>
+                                    }
+                                </td>
+                                <td><span class="badge bg-secondary">@s.Status</span></td>
+                                <td><code>@s.OwnerId</code></td>
+                                <td>@s.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                                <td class="text-end">
+                                    @* Ví dụ nút chỉ hiện nếu đủ quyền (client-side). Backend vẫn phải kiểm tra bằng CheckPermission *@
+                                    @if (string.Equals(role, "Editor", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <a class="btn btn-outline-primary btn-sm" asp-controller="Survey" asp-action="Edit" asp-route-id="@s.SurveyId">Edit</a>
+                                    }
+                                    <a class="btn btn-outline-secondary btn-sm" asp-controller="Survey" asp-action="Report" asp-route-id="@s.SurveyId">Report</a>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/js/survey/my.js" asp-append-version="true"></script>
+}

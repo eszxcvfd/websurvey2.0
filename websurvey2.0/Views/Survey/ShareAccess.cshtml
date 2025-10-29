@@ -1,0 +1,117 @@
+@model websurvey2._0.ViewModels.AssignRoleViewModel
+@{
+    ViewData["Title"] = "Share Access";
+    var survey = (websurvey2._0.Models.Survey)ViewBag.Survey;
+    var collaborators = (List<websurvey2._0.Models.SurveyCollaborator>)ViewBag.Collaborators;
+}
+<link rel="stylesheet" href="~/css/survey/share.css" asp-append-version="true" />
+
+<div class="share-container">
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="mb-1">@survey.Title</h5>
+            <div class="text-muted small">Survey ID: <code>@survey.SurveyId</code> • Status: <span class="badge bg-secondary">@survey.Status</span></div>
+        </div>
+    </div>
+
+    @if (TempData["ShareError"] is string emsg)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @emsg
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ShareSuccess"] is string smsg)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @smsg
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h6 class="mb-3">Grant access</h6>
+            <form asp-action="AssignRole" asp-controller="Survey" method="post" id="assignForm" class="row g-3">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="SurveyId" value="@survey.SurveyId" />
+                <div class="col-md-5">
+                    <label for="TargetUserId" class="form-label">Target User ID (GUID)</label>
+                    <input asp-for="TargetUserId" class="form-control" placeholder="Paste user's GUID" />
+                    <span asp-validation-for="TargetUserId" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Role" class="form-label">Role</label>
+                    <select asp-for="Role" class="form-select">
+                        <option value="Viewer">Viewer</option>
+                        <option value="Editor">Editor</option>
+                        @* Admin is reserved and not shown *@
+                    </select>
+                    <span asp-validation-for="Role" class="text-danger"></span>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">Assign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h6 class="mb-3">Collaborators</h6>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Role</th>
+                            <th>Granted At</th>
+                            <th>Granted By</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>@survey.OwnerId</code></td>
+                            <td><span class="badge bg-dark">Owner</span></td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td></td>
+                        </tr>
+                        @foreach (var c in collaborators)
+                        {
+                            <tr>
+                                <td><code>@c.UserId</code></td>
+                                <td>
+                                    @if (string.Equals(c.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-warning text-dark">Admin</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@c.Role</span>
+                                    }
+                                </td>
+                                <td>@c.GrantedAtUtc.ToLocalTime().ToString("g")</td>
+                                <td><code>@(c.GrantedBy?.ToString() ?? "-")</code></td>
+                                <td class="text-end">
+                                    <form asp-action="RemoveCollaborator" asp-controller="Survey" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="surveyId" value="@c.SurveyId" />
+                                        <input type="hidden" name="userId" value="@c.UserId" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <a asp-action="My" asp-controller="Survey" class="btn btn-outline-secondary mt-2">Back</a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

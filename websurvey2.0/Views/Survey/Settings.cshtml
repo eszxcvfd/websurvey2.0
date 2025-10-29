@@ -1,0 +1,65 @@
+@model websurvey2._0.ViewModels.SurveySettingsViewModel
+@{
+    ViewData["Title"] = "Survey Settings";
+}
+<link rel="stylesheet" href="~/css/survey/settings.css" asp-append-version="true" />
+
+<div class="settings-container">
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">Survey settings</h4>
+                <div>
+                    <a class="btn btn-outline-primary" asp-controller="Question" asp-action="Index" asp-route-surveyId="@Model.SurveyId">Questions</a>
+                </div>
+            </div>
+
+            @if (TempData["SettingsSuccess"] is string smsg)
+            {
+                <div class="alert alert-success alert-dismissible fade show">
+                    @smsg
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <form id="settingsForm" asp-action="UpdateSettings" asp-controller="Survey" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="SurveyId" />
+
+                <div class="mb-3">
+                    <label asp-for="Title" class="form-label"></label>
+                    <input asp-for="Title" class="form-control" placeholder="Survey title" />
+                    <span asp-validation-for="Title" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Description" class="form-label"></label>
+                    <textarea asp-for="Description" rows="4" class="form-control" placeholder="Short description"></textarea>
+                    <span asp-validation-for="Description" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="DefaultLanguage" class="form-label">Default language</label>
+                    <input asp-for="DefaultLanguage" class="form-control" placeholder="e.g. en, vi" />
+                    <span asp-validation-for="DefaultLanguage" class="text-danger"></span>
+                </div>
+
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" asp-for="IsAnonymous" />
+                    <label class="form-check-label" asp-for="IsAnonymous">Anonymous responses</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="saveBtn">
+                    <span id="btnText">Save settings</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+                </button>
+                <a asp-action="My" asp-controller="Survey" class="btn btn-outline-secondary ms-2">Back</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/survey/settings.js" asp-append-version="true"></script>
+}

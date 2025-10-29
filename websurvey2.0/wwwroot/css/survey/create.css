@@ -1,0 +1,7 @@
+.create-container {
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+.card { border-radius: 12px; border: none; }
+#submitBtn { min-width: 140px; }

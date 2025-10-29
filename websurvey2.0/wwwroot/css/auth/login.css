@@ -1,0 +1,44 @@
+.auth-container {
+  max-width: 450px;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+.auth-container h2 {
+  margin-bottom: 1rem;
+}
+
+#alert-container .alert {
+  margin-bottom: 1rem;
+}
+
+.card {
+  border-radius: 12px;
+  border: none;
+}
+
+.btn-primary {
+  padding: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.35);
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.45);
+}
+
+.form-control:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+a {
+  color: #0d6efd;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: #0a58ca;
+}

@@ -1,0 +1,60 @@
+@model websurvey2._0.ViewModels.ProfileViewModel
+@{
+    ViewData["Title"] = "My Profile";
+}
+<link rel="stylesheet" href="~/css/account/profile.css" asp-append-version="true" />
+
+<div class="profile-container">
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <h4 class="mb-3">My Profile</h4>
+
+            @if (TempData["ProfileSuccess"] is string smsg)
+            {
+                <div class="alert alert-success alert-dismissible fade show">
+                    @smsg
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+            @if (TempData["ProfileError"] is string emsg)
+            {
+                <div class="alert alert-danger alert-dismissible fade show">
+                    @emsg
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <form id="profileForm" asp-action="UpdateProfile" asp-controller="Account" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="UserId" />
+
+                <div class="mb-3">
+                    <label asp-for="Email" class="form-label"></label>
+                    <input asp-for="Email" class="form-control" readonly />
+                    <span asp-validation-for="Email" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="FullName" class="form-label"></label>
+                    <input asp-for="FullName" class="form-control" placeholder="Your full name" />
+                    <span asp-validation-for="FullName" class="text-danger"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="AvatarUrl" class="form-label"></label>
+                    <input asp-for="AvatarUrl" class="form-control" placeholder="https://..." />
+                    <span asp-validation-for="AvatarUrl" class="text-danger"></span>
+                </div>
+                <button type="submit" class="btn btn-primary" id="saveBtn">
+                    <span id="btnText">Save changes</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+                </button>
+                <a asp-action="ChangePassword" asp-controller="Account" class="btn btn-outline-secondary ms-2">Change password</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/account/profile.js" asp-append-version="true"></script>
+}

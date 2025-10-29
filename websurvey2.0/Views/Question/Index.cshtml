@@ -1,0 +1,63 @@
+@model List<websurvey2._0.Models.Question>
+@{
+    ViewData["Title"] = "Questions";
+    var surveyId = (Guid)ViewBag.SurveyId;
+}
+<link rel="stylesheet" href="~/css/question/edit.css" asp-append-version="true" />
+
+<div class="q-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Questions</h4>
+        <div>
+            <a class="btn btn-primary" asp-action="Create" asp-route-surveyId="@surveyId">Add Question</a>
+            <a class="btn btn-outline-secondary" asp-controller="Survey" asp-action="Settings" asp-route-id="@surveyId">Back to Settings</a>
+        </div>
+    </div>
+
+    @if (TempData["QError"] is string emsg)
+    {
+        <div class="alert alert-danger">@emsg</div>
+    }
+    @if (TempData["QSuccess"] is string smsg)
+    {
+        <div class="alert alert-success">@smsg</div>
+    }
+
+    @if (Model.Count == 0)
+    {
+        <div class="text-muted">No questions yet.</div>
+    }
+    else
+    {
+        <form id="reorderForm" asp-action="Reorder" method="post" class="mb-3">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="surveyId" value="@surveyId" />
+            <ol id="qList" class="list-group list-group-numbered">
+                @foreach (var q in Model)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center" data-id="@q.QuestionId">
+                        <div>
+                            <div class="fw-semibold">@q.QuestionText</div>
+                            <div class="text-muted small">Type: @q.QuestionType • Required: @(q.IsRequired ? "Yes" : "No")</div>
+                        </div>
+                        <div class="btn-group">
+                            <a class="btn btn-sm btn-outline-secondary" asp-controller="Question" asp-action="Edit" asp-route-id="@q.QuestionId">Edit</a>
+                            <form asp-action="Delete" method="post" class="ms-1">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@q.QuestionId" />
+                                <input type="hidden" name="surveyId" value="@q.SurveyId" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this question?')">Delete</button>
+                            </form>
+                        </div>
+                    </li>
+                }
+            </ol>
+            <div id="orderedIds"></div>
+            <button type="submit" class="btn btn-outline-primary">Save order</button>
+        </form>
+    }
+</div>
+
+@section Scripts {
+<script src="~/js/question/reorder.js" asp-append-version="true"></script>
+}

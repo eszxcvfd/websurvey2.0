@@ -1,0 +1,40 @@
+@model websurvey2._0.ViewModels.SurveyCreateViewModel
+@{
+    ViewData["Title"] = "Create Survey";
+}
+<link rel="stylesheet" href="~/css/survey/create.css" asp-append-version="true" />
+
+<div class="create-container">
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <h4 class="mb-3">Create new survey</h4>
+
+            <form id="createForm" asp-controller="Survey" asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label asp-for="Title" class="form-label"></label>
+                    <input asp-for="Title" class="form-control" placeholder="Your survey title" autofocus />
+                    <span asp-validation-for="Title" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Lang" class="form-label">Default Language</label>
+                    <input asp-for="Lang" class="form-control" placeholder="e.g. en, vi" />
+                    <span asp-validation-for="Lang" class="text-danger"></span>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="submitBtn">
+                    <span id="btnText">Create</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+                <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary ms-2">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/survey/create.js" asp-append-version="true"></script>
+}

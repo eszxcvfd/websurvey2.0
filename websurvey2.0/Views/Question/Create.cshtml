@@ -1,0 +1,205 @@
+@model websurvey2._0.ViewModels.QuestionEditViewModel
+@{
+    ViewData["Title"] = Model.QuestionId.HasValue ? "Edit Question" : "Create Question";
+}
+<link rel="stylesheet" href="~/css/question/edit.css" asp-append-version="true" />
+
+<div class="q-container">
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <h4 class="mb-3">@ViewData["Title"]</h4>
+
+            <form id="qForm" asp-action="@(Model.QuestionId.HasValue ? "Edit" : "Create")" method="post">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                <input type="hidden" asp-for="SurveyId" />
+                @if (Model.QuestionId.HasValue)
+                {
+                    <input type="hidden" asp-for="QuestionId" />
+                }
+
+                <div class="mb-3">
+                    <label asp-for="QuestionText" class="form-label"></label>
+                    <textarea asp-for="QuestionText" rows="2" class="form-control" placeholder="Enter question text"></textarea>
+                    <span asp-validation-for="QuestionText" class="text-danger"></span>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label asp-for="QuestionType" class="form-label">Question type</label>
+                        <select asp-for="QuestionType" class="form-select" id="qType">
+                            <optgroup label="Text">
+                                <option>ShortText</option>
+                                <option>LongText</option>
+                                <option>Email</option>
+                                <option>Phone</option>
+                                <option>Url</option>
+                            </optgroup>
+                            <optgroup label="Numeric/Date">
+                                <option>Number</option>
+                                <option>Date</option>
+                                <option>Time</option>
+                                <option>DateTime</option>
+                                <option>Slider</option>
+                            </optgroup>
+                            <optgroup label="Choice">
+                                <option>MultipleChoice</option>
+                                <option>Checkboxes</option>
+                                <option>Dropdown</option>
+                                <option>MultiSelectDropdown</option>
+                                <option>Ranking</option>
+                            </optgroup>
+                            <optgroup label="Scales">
+                                <option>Rating</option>
+                                <option>NPS</option>
+                                <option>Likert</option>
+                                <option>Matrix</option>
+                            </optgroup>
+                            <optgroup label="Other">
+                                <option>YesNo</option>
+                                <option>Section</option>
+                                <option>PageBreak</option>
+                            </optgroup>
+                        </select>
+                        <span asp-validation-for="QuestionType" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="form-check">
+                            <input asp-for="IsRequired" class="form-check-input" />
+                            <label asp-for="IsRequired" class="form-check-label">Required</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label asp-for="Placeholder" class="form-label"></label>
+                        <input asp-for="Placeholder" class="form-control" placeholder="Placeholder (optional)" />
+                        <span asp-validation-for="Placeholder" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3 mt-3">
+                    <label asp-for="HelpText" class="form-label"></label>
+                    <input asp-for="HelpText" class="form-control" placeholder="Optional help text" />
+                    <span asp-validation-for="HelpText" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3" data-block="textlike">
+                    <label asp-for="RegexPattern" class="form-label">Regex pattern (optional)</label>
+                    <input asp-for="RegexPattern" class="form-control" placeholder="^\S+@@\S+\.\S+$ for Email, etc." />
+                    <span asp-validation-for="RegexPattern" class="text-danger"></span>
+                </div>
+
+                <div class="row g-3 mb-3 d-none" data-block="number">
+                    <div class="col-md-4">
+                        <label asp-for="NumberMin" class="form-label">Min</label>
+                        <input asp-for="NumberMin" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="NumberMax" class="form-label">Max</label>
+                        <input asp-for="NumberMax" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="NumberStep" class="form-label">Step</label>
+                        <input asp-for="NumberStep" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3 d-none" data-block="rating">
+                    <div class="col-md-4">
+                        <label asp-for="RatingMax" class="form-label">Max stars</label>
+                        <input asp-for="RatingMax" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3 d-none" data-block="slider">
+                    <div class="col-md-4">
+                        <label asp-for="SliderMin" class="form-label">Min</label>
+                        <input asp-for="SliderMin" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="SliderMax" class="form-label">Max</label>
+                        <input asp-for="SliderMax" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="SliderStep" class="form-label">Step</label>
+                        <input asp-for="SliderStep" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3 d-none" data-block="nps">
+                    <div class="col-md-6">
+                        <label asp-for="NpsLowLabel" class="form-label">0 label</label>
+                        <input asp-for="NpsLowLabel" class="form-control" placeholder="Not at all likely" />
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="NpsHighLabel" class="form-label">10 label</label>
+                        <input asp-for="NpsHighLabel" class="form-control" placeholder="Extremely likely" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3 d-none" data-block="choices">
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input asp-for="AllowOther" class="form-check-input" />
+                            <label asp-for="AllowOther" class="form-check-label">Allow "Other"</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input asp-for="RandomizeOptions" class="form-check-input" />
+                            <label asp-for="RandomizeOptions" class="form-check-label">Randomize options</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3 d-none" data-block="likert">
+                    <label asp-for="LikertScaleCsv" class="form-label">Likert scale labels (comma separated)</label>
+                    <input asp-for="LikertScaleCsv" class="form-control" placeholder="Strongly disagree, Disagree, Neutral, Agree, Strongly agree" />
+                </div>
+
+                <div class="mb-3 d-none" data-block="matrix">
+                    <label asp-for="MatrixColumnsCsv" class="form-label">Matrix columns (comma separated)</label>
+                    <input asp-for="MatrixColumnsCsv" class="form-control" placeholder="Bad, Fair, Good, Very good, Excellent" />
+                </div>
+
+                <div id="optionsBlock" class="mb-3 d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">Options</label>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" type="button" id="addOptBtn">Add option</button>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" id="bulkAddBtn">Bulk add</button>
+                        </div>
+                    </div>
+                    <div id="optionsContainer">
+                        @for (int i = 0; i < Model.Options.Count; i++)
+                        {
+                            <div class="option-row input-group mb-2" data-index="@i">
+                                <input type="hidden" name="Options[@i].OptionId" value="@Model.Options[i].OptionId" />
+                                <input type="hidden" name="Options[@i].OptionOrder" value="@(i+1)" />
+                                <span class="input-group-text">#@(i+1)</span>
+                                <input name="Options[@i].OptionText" class="form-control" placeholder="Option text" value="@Model.Options[i].OptionText" />
+                                <input name="Options[@i].OptionValue" class="form-control" placeholder="Value (optional)" value="@Model.Options[i].OptionValue" />
+                                <div class="input-group-text">
+                                    <input type="hidden" name="Options[@i].IsActive" value="false" />
+                                    <input class="form-check-input mt-0" type="checkbox" name="Options[@i].IsActive" value="true" @(Model.Options[i].IsActive ? "checked" : "") />
+                                </div>
+                                <button class="btn btn-outline-danger remove-opt-btn" type="button">Remove</button>
+                            </div>
+                        }
+                    </div>
+                    <small class="text-muted">Use Bulk add to paste lines and create many options quickly.</small>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">@ViewData["Title"]</button>
+                    <a class="btn btn-outline-secondary ms-2" asp-action="Index" asp-route-surveyId="@Model.SurveyId">Back</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/question/edit.js" asp-append-version="true"></script>
+}

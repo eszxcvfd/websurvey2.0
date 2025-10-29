@@ -1,0 +1,7 @@
+.profile-container {
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+.card { border-radius: 12px; border: none; }
+#saveBtn { min-width: 160px; }
