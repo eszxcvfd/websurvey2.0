@@ -65,11 +65,12 @@ public class QuestionService : IQuestionService
                 .OrderBy(o => o.OptionOrder)
                 .Select(o => new QuestionOptionViewModel
                 {
-                    OptionId = o.OptionId,
+                    OptionId = o.OptionId, // Use the correct property
                     OptionText = o.OptionText,
                     OptionValue = o.OptionValue,
                     OptionOrder = o.OptionOrder,
-                    IsActive = o.IsActive
+                    IsActive = o.IsActive,
+                    DisplayOrder = o.OptionOrder // Explicitly set DisplayOrder if needed
                 }).ToList(),
             // Populate available questions for branching (exclude current question)
             AvailableQuestions = allQuestions

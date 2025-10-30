@@ -1,0 +1,29 @@
+@{
+    ViewData["Title"] = "Thank You";
+}
+
+<link rel="stylesheet" href="~/css/respond/thank-you.css" asp-append-version="true" />
+
+<div class="thank-you-container">
+    <div class="thank-you-card">
+        <div class="success-icon">
+            <i class="bi bi-check-circle-fill"></i>
+        </div>
+        <h1 class="thank-you-title">Thank You!</h1>
+        <p class="thank-you-message">
+            Your response has been successfully submitted.
+        </p>
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="alert alert-success">
+                @TempData["SuccessMessage"]
+            </div>
+        }
+        @if (ViewBag.ResponseId != null)
+        {
+            <p class="text-muted small">
+                Response ID: <code>@ViewBag.ResponseId</code>
+            </p>
+        }
+    </div>
+</div>

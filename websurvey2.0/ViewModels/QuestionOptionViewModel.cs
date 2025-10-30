@@ -15,4 +15,6 @@ public class QuestionOptionViewModel
     public int OptionOrder { get; set; } = 1;
 
     public bool IsActive { get; set; } = true;
+
+    public int DisplayOrder { get; set; } = 1;
 }

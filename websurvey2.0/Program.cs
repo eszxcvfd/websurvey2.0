@@ -55,6 +55,13 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
+// Repositories
+builder.Services.AddScoped<ISurveyResponseRepository, SurveyResponseRepository>();
+builder.Services.AddScoped<IResponseAnswerRepository, ResponseAnswerRepository>();
+
+// Services
+builder.Services.AddScoped<IResponseService, ResponseService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -72,6 +79,12 @@ app.UseRouting();
 app.UseSession();
 
 app.UseAuthorization();
+
+// Add custom route for survey links BEFORE the default route
+app.MapControllerRoute(
+    name: "surveyLink",
+    pattern: "s/{slug}",
+    defaults: new { controller = "Respond", action = "ShowSurveyBySlug" });
 
 app.MapControllerRoute(
     name: "default",

@@ -1,0 +1,300 @@
+@model websurvey2._0.ViewModels.RespondViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = Model.Title;
+    var antiSpamToken = ViewBag.AntiSpamToken as string ?? string.Empty;
+    var totalQuestions = Model.Questions.Count;
+    var orderedQuestions = Model.Questions.OrderBy(q => q.QuestionOrder).ToList();
+}
+
+<link rel="stylesheet" href="~/css/respond/show-survey.css" asp-append-version="true" />
+
+<div class="respond-container">
+    <!-- header + progress unchanged -->
+    <form id="respondForm" asp-controller="Respond" asp-action="SubmitResponse" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="SurveyId" value="@Model.SurveyId" />
+        <input type="hidden" name="ChannelId" value="@Model.ChannelId" />
+        <input type="hidden" name="AntiSpamToken" value="@antiSpamToken" />
+        <input type="hidden" id="currentQuestionIndex" value="0" />
+
+        <div id="alert-container"></div>
+
+        @if (!Model.IsAnonymous)
+        {
+            <div class="mb-4 question-page" data-page="email">
+                <label for="RespondentEmail" class="form-label">Email (optional)</label>
+                <input type="email" class="form-control" id="RespondentEmail" name="RespondentEmail" placeholder="your@email.com" />
+            </div>
+        }
+
+        @for (int pageIndex = 0; pageIndex < orderedQuestions.Count; pageIndex++)
+        {
+            var question = orderedQuestions[pageIndex];
+            var isFirstQuestion = pageIndex == 0;
+            var displayStyle = isFirstQuestion && Model.IsAnonymous ? "display: block;" : "display: none;";
+            <div class="question-page" data-page="@pageIndex" data-question-id="@question.QuestionId" style="@displayStyle">
+                <div class="question-card mb-4">
+                    <div class="question-header">
+                        <label class="question-text">
+                            @question.QuestionText
+                            @if (question.IsRequired) { <span class="text-danger">*</span> }
+                        </label>
+                    </div>
+                    <div class="question-body">
+                        @switch (question.QuestionType)
+                        {
+                            case "ShortText":
+                                <input type="text" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "LongText":
+                                <textarea class="form-control question-input"
+                                          name="Answers[@question.QuestionId]" rows="4"
+                                          data-required="@question.IsRequired.ToString().ToLower()"
+                                          data-question-id="@question.QuestionId"></textarea>
+                                break;
+                            case "Email":
+                                <input type="email" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "Phone":
+                                <input type="tel" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "Url":
+                                <input type="url" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "Number":
+                                <input type="number" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]" step="any"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "Date":
+                                <input type="date" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "Time":
+                                <input type="time" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "DateTime":
+                                <input type="datetime-local" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "Slider":
+                                <input type="range" class="form-range question-input"
+                                       name="Answers[@question.QuestionId]" min="0" max="100" step="1"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                            case "SingleChoice":
+                            case "MultipleChoice":
+                                @foreach (var opt in question.Options.OrderBy(o => o.DisplayOrder))
+                                {
+                                    var rid = $"opt_{opt.OptionId}";
+                                    <div class="form-check">
+                                        <input class="form-check-input question-input" 
+                                               type="radio" 
+                                               name="Answers[@question.QuestionId]"
+                                               value="@opt.OptionText" 
+                                               id="@rid"
+                                               data-option-id="@opt.OptionId"
+                                               data-required="@question.IsRequired.ToString().ToLower()"
+                                               data-question-id="@question.QuestionId" />
+                                        <label class="form-check-label" for="@rid">@opt.OptionText</label>
+                                    </div>
+                                }
+                                break;
+                            case "Checkboxes":
+                                foreach (var opt in question.Options.OrderBy(o => o.DisplayOrder))
+                                {
+                                    var cid = $"opt_{opt.OptionId}";
+                                    <div class="form-check">
+                                        <input class="form-check-input question-input multi-choice"
+                                               type="checkbox"
+                                               name="CheckGroup_@question.QuestionId"
+                                               value="@opt.OptionText"
+                                               id="@cid"
+                                               data-option-id="@opt.OptionId"
+                                               data-required="@question.IsRequired.ToString().ToLower()"
+                                               data-question-id="@question.QuestionId" />
+                                        <label class="form-check-label" for="@cid">@opt.OptionText</label>
+                                    </div>
+                                }
+                                <input type="hidden" name="Answers[@question.QuestionId]" class="multi-choice-hidden" data-question="@question.QuestionId" />
+                                break;
+                            case "Dropdown":
+                                <select class="form-select question-input"
+                                        name="Answers[@question.QuestionId]"
+                                        data-required="@question.IsRequired.ToString().ToLower()"
+                                        data-question-id="@question.QuestionId">
+                                    <option value="">-- Select an option --</option>
+                                    @foreach (var opt in question.Options.OrderBy(o => o.DisplayOrder))
+                                    {
+                                        <option value="@opt.OptionText" data-option-id="@opt.OptionId">@opt.OptionText</option>
+                                    }
+                                </select>
+                                break;
+                            case "MultiSelectDropdown":
+                                {
+                                    var hiddenName = $"Answers[{question.QuestionId}]";
+                                    <select class="form-select question-input multi-select" multiple
+                                            data-hidden-name="@hiddenName"
+                                            data-question="@question.QuestionId"
+                                            data-required="@question.IsRequired.ToString().ToLower()"
+                                            data-question-id="@question.QuestionId">
+                                        @foreach (var opt in question.Options.OrderBy(o => o.DisplayOrder))
+                                        {
+                                            <option value="@opt.OptionText" data-option-id="@opt.OptionId">@opt.OptionText</option>
+                                        }
+                                    </select>
+                                    <input type="hidden" name="Answers[@question.QuestionId]" class="multi-select-hidden" data-question="@question.QuestionId" />
+                                }
+                                break;
+                            case "Ranking":
+                                <textarea class="form-control question-input"
+                                          name="Answers[@question.QuestionId]" rows="3"
+                                          placeholder="Enter preferred order (comma separated)"
+                                          data-required="@question.IsRequired.ToString().ToLower()"
+                                          data-question-id="@question.QuestionId"></textarea>
+                                <small class="text-muted">Example: Option B, Option A, Option C</small>
+                                break;
+                            case "Rating":
+                                <div class="rating-container">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        var id = $"rating_{question.QuestionId}_{i}";
+                                        <input type="radio" name="Answers[@question.QuestionId]" value="@i" id="@id"
+                                               class="rating-input question-input"
+                                               data-required="@question.IsRequired.ToString().ToLower()"
+                                               data-question-id="@question.QuestionId" />
+                                        <label for="@id" class="rating-label"><i class="bi bi-star"></i></label>
+                                    }
+                                </div>
+                                break;
+                            case "NPS":
+                                <div class="nps-container d-flex flex-wrap gap-2">
+                                    @for (int i = 0; i <= 10; i++)
+                                    {
+                                        var id = $"nps_{question.QuestionId}_{i}";
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input question-input" type="radio"
+                                                   name="Answers[@question.QuestionId]" value="@i" id="@id"
+                                                   data-required="@question.IsRequired.ToString().ToLower()"
+                                                   data-question-id="@question.QuestionId" />
+                                            <label class="form-check-label" for="@id">@i</label>
+                                        </div>
+                                    }
+                                </div>
+                                break;
+                            case "Likert":
+                            case "Matrix":
+                                <textarea class="form-control question-input"
+                                          name="Answers[@question.QuestionId]" rows="3"
+                                          data-required="@question.IsRequired.ToString().ToLower()"
+                                          data-question-id="@question.QuestionId"></textarea>
+                                break;
+                            case "YesNo":
+                                {
+                                    var idYes = $"yn_{question.QuestionId}_yes";
+                                    var idNo = $"yn_{question.QuestionId}_no";
+                                    <div class="form-check">
+                                        <input class="form-check-input question-input" type="radio" id="@idYes"
+                                               name="Answers[@question.QuestionId]" value="Yes"
+                                               data-required="@question.IsRequired.ToString().ToLower()"
+                                               data-question-id="@question.QuestionId" />
+                                        <label class="form-check-label" for="@idYes">Yes</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input question-input" type="radio" id="@idNo"
+                                               name="Answers[@question.QuestionId]" value="No"
+                                               data-required="@question.IsRequired.ToString().ToLower()"
+                                               data-question-id="@question.QuestionId" />
+                                        <label class="form-check-label" for="@idNo">No</label>
+                                    </div>
+                                }
+                                break;
+                            case "Section":
+                            case "PageBreak":
+                                <div class="alert alert-secondary">Continue to next section</div>
+                                break;
+                            default:
+                                <input type="text" class="form-control question-input"
+                                       name="Answers[@question.QuestionId]"
+                                       data-required="@question.IsRequired.ToString().ToLower()"
+                                       data-question-id="@question.QuestionId" />
+                                break;
+                        }
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <button type="button" class="btn btn-secondary btn-prev" id="btnPrev_@pageIndex" style="@(pageIndex == 0 ? "visibility: hidden;" : "")">
+                        <i class="bi bi-arrow-left"></i> Previous
+                    </button>
+                    @if (pageIndex < orderedQuestions.Count - 1)
+                    {
+                        <button type="button" class="btn btn-primary btn-next" id="btnNext_@pageIndex">
+                            Next <i class="bi bi-arrow-right"></i>
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="submit" class="btn btn-success" id="submitBtn">
+                            <span id="btnText">Submit Response</span>
+                            <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        const totalQuestions = @totalQuestions;
+        const isAnonymous = @Model.IsAnonymous.ToString().ToLower();
+    </script>
+
+    @* NEW: expose branching rules + question ids for client *@
+    <script id="branchLogicData" type="application/json">
+        @Html.Raw(JsonSerializer.Serialize(Model.BranchLogics, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }))
+    </script>
+    <script id="pageQuestionIdsData" type="application/json">
+        @Html.Raw(JsonSerializer.Serialize(orderedQuestions.Select(q => q.QuestionId)))
+    </script>
+
+    <script src="~/js/respond/show-survey.js" asp-append-version="true"></script>
+    <script>
+        // Minimal handler to serialize MultiSelectDropdown
+        document.addEventListener('change', function (e) {
+            if (e.target && e.target.classList.contains('multi-select')) {
+                const select = e.target;
+                const q = select.getAttribute('data-question');
+                const hidden = document.querySelector(`input.multi-select-hidden[data-question="${q}"]`);
+                if (hidden) {
+                    const vals = Array.from(select.selectedOptions).map(o => o.value).filter(v => v && v.trim().length > 0);
+                    hidden.value = vals.join('|');
+                }
+            }
+        });
+    </script>
+}

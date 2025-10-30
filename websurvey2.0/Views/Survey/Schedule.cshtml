@@ -29,12 +29,15 @@
                             <div class="card-body">
                                 <h6 class="card-title text-info">🟢 Open Time</h6>
                                 <div class="mb-3">
-                                    <label asp-for="OpenAtUtc" class="form-label">Open Date & Time (UTC)</label>
+                                    <label asp-for="OpenAtUtc" class="form-label">Open Date & Time (Your Local Time)</label>
                                     <input type="datetime-local" asp-for="OpenAtUtc" class="form-control" id="openAtInput" />
                                     <span asp-validation-for="OpenAtUtc" class="text-danger"></span>
-                                    @if (Model.OpenAtLocal.HasValue)
+                                    @if (Model.OpenAtUtc.HasValue && Model.OpenAtLocal.HasValue)
                                     {
-                                        <small class="text-muted">Local: @Model.OpenAtLocal.Value.ToString("g")</small>
+                                        <small class="text-muted d-block">
+                                            UTC: @Model.OpenAtUtc.Value.ToString("yyyy-MM-dd HH:mm") | 
+                                            Local: @Model.OpenAtLocal.Value.ToString("yyyy-MM-dd HH:mm")
+                                        </small>
                                     }
                                 </div>
                                 <div class="form-text">
@@ -50,12 +53,15 @@
                             <div class="card-body">
                                 <h6 class="card-title text-danger">🔴 Close Time</h6>
                                 <div class="mb-3">
-                                    <label asp-for="CloseAtUtc" class="form-label">Close Date & Time (UTC)</label>
+                                    <label asp-for="CloseAtUtc" class="form-label">Close Date & Time (Your Local Time)</label>
                                     <input type="datetime-local" asp-for="CloseAtUtc" class="form-control" id="closeAtInput" />
                                     <span asp-validation-for="CloseAtUtc" class="text-danger"></span>
-                                    @if (Model.CloseAtLocal.HasValue)
+                                    @if (Model.CloseAtUtc.HasValue && Model.CloseAtLocal.HasValue)
                                     {
-                                        <small class="text-muted">Local: @Model.CloseAtLocal.Value.ToString("g")</small>
+                                        <small class="text-muted d-block">
+                                            UTC: @Model.CloseAtUtc.Value.ToString("yyyy-MM-dd HH:mm") | 
+                                            Local: @Model.CloseAtLocal.Value.ToString("yyyy-MM-dd HH:mm")
+                                        </small>
                                     }
                                 </div>
                                 <div class="form-text">
@@ -135,6 +141,49 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
+        // Helper: convert UTC datetime to local "YYYY-MM-DDTHH:mm" format for datetime-local input
+        function utcToLocalInputString(utcDateStr) {
+            if (!utcDateStr) return '';
+            const dt = new Date(utcDateStr);
+            const pad = n => n.toString().padStart(2, '0');
+            return dt.getFullYear() + '-' +
+                pad(dt.getMonth() + 1) + '-' +
+                pad(dt.getDate()) + 'T' +
+                pad(dt.getHours()) + ':' +
+                pad(dt.getMinutes());
+        }
+
+        // Helper: convert local datetime to UTC "YYYY-MM-DDTHH:mm" format
+        function localToUtcInputString(dt) {
+            const pad = n => n.toString().padStart(2, '0');
+            return dt.getUTCFullYear() + '-' +
+                pad(dt.getUTCMonth() + 1) + '-' +
+                pad(dt.getUTCDate()) + 'T' +
+                pad(dt.getUTCHours()) + ':' +
+                pad(dt.getUTCMinutes());
+        }
+
+        // On page load: Convert UTC values from server to local time for display
+        window.addEventListener('DOMContentLoaded', function() {
+            const openInput = document.getElementById('openAtInput');
+            const closeInput = document.getElementById('closeAtInput');
+
+            // If there's a value from server (in UTC), convert to local for display
+            if (openInput.value) {
+                const serverValue = '@Model.OpenAtUtc?.ToString("o")';
+                if (serverValue && serverValue !== '') {
+                    openInput.value = utcToLocalInputString(serverValue);
+                }
+            }
+            
+            if (closeInput.value) {
+                const serverValue = '@Model.CloseAtUtc?.ToString("o")';
+                if (serverValue && serverValue !== '') {
+                    closeInput.value = utcToLocalInputString(serverValue);
+                }
+            }
+        });
+
         // Update current time display every second
         setInterval(function() {
             document.getElementById('currentUtc').textContent = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -144,21 +193,31 @@
             }).replace(',', '');
         }, 1000);
 
-        // Validation: Ensure close date is after open date
+        // Validation + normalize to UTC before submit
         document.querySelector('form').addEventListener('submit', function(e) {
             const openInput = document.getElementById('openAtInput');
             const closeInput = document.getElementById('closeAtInput');
             
+            // Client-side validation on local values
             if (openInput.value && closeInput.value) {
-                const openDate = new Date(openInput.value);
-                const closeDate = new Date(closeInput.value);
-                
-                if (closeDate <= openDate) {
+                const openLocal = new Date(openInput.value);
+                const closeLocal = new Date(closeInput.value);
+                if (closeLocal <= openLocal) {
                     e.preventDefault();
                     alert('Close date must be after open date.');
                     closeInput.focus();
                     return false;
                 }
+            }
+
+            // Convert local input to UTC before submitting
+            if (openInput.value) {
+                const openLocal = new Date(openInput.value);
+                openInput.value = localToUtcInputString(openLocal);
+            }
+            if (closeInput.value) {
+                const closeLocal = new Date(closeInput.value);
+                closeInput.value = localToUtcInputString(closeLocal);
             }
         });
     </script>

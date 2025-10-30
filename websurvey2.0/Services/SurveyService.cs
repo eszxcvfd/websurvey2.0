@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using websurvey2._0.Models;
 using websurvey2._0.Repositories;
 using websurvey2._0.ViewModels;
@@ -16,6 +16,19 @@ public class SurveyService : ISurveyService
         _surveys = surveys;
         _logs = logs;
         _db = db;
+    }
+
+    // Helper: normalize any DateTime? to UTC
+    private static DateTime? NormalizeToUtc(DateTime? dt)
+    {
+        if (!dt.HasValue) return null;
+        var v = dt.Value;
+        return v.Kind switch
+        {
+            DateTimeKind.Utc => v,
+            DateTimeKind.Local => v.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(v, DateTimeKind.Utc) // FIX: Unspecified đã là UTC từ client-side script
+        };
     }
 
     public async Task<(bool Success, IEnumerable<string> Errors, Survey? Survey)> CreateDraftSurvey(
@@ -110,20 +123,24 @@ public class SurveyService : ISurveyService
         var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
         if (survey is null) return (false, new[] { "Survey not found." });
 
+        // Normalize incoming values to UTC first
+        var openUtc = NormalizeToUtc(openAtUtc);
+        var closeUtc = NormalizeToUtc(closeAtUtc);
+
         // Validation: Close date must be after open date
-        if (openAtUtc.HasValue && closeAtUtc.HasValue && closeAtUtc.Value <= openAtUtc.Value)
+        if (openUtc.HasValue && closeUtc.HasValue && closeUtc.Value <= openUtc.Value)
         {
             return (false, new[] { "Close date must be after open date." });
         }
 
-        // Validation: Cannot set dates in the past (optional, depending on requirements)
+        // Validation: Cannot set dates in the past (with tolerance)
         var now = DateTime.UtcNow;
-        if (openAtUtc.HasValue && openAtUtc.Value < now.AddMinutes(-5)) // 5 minutes tolerance
+        if (openUtc.HasValue && openUtc.Value < now.AddMinutes(-5))
         {
             return (false, new[] { "Open date cannot be in the past." });
         }
 
-        if (closeAtUtc.HasValue && closeAtUtc.Value < now.AddMinutes(-5))
+        if (closeUtc.HasValue && closeUtc.Value < now.AddMinutes(-5))
         {
             return (false, new[] { "Close date cannot be in the past." });
         }
@@ -131,11 +148,11 @@ public class SurveyService : ISurveyService
         using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
-            survey.OpenAtUtc = openAtUtc;
-            survey.CloseAtUtc = closeAtUtc;
+            survey.OpenAtUtc = openUtc;
+            survey.CloseAtUtc = closeUtc;
             survey.UpdatedAtUtc = DateTime.UtcNow;
 
-            var detail = $"Schedule updated. Open={(openAtUtc?.ToString("o") ?? "N/A")}, Close={(closeAtUtc?.ToString("o") ?? "N/A")}";
+            var detail = $"Schedule updated. Open={(openUtc?.ToString("o") ?? "N/A")}, Close={(closeUtc?.ToString("o") ?? "N/A")}";
             await _logs.AddAsync(new ActivityLog
             {
                 UserId = actingUserId,
@@ -165,23 +182,51 @@ public class SurveyService : ISurveyService
         var survey = await _surveys.GetByIdTrackedAsync(surveyId, ct);
         if (survey is null) return (false, new[] { "Survey not found." });
 
+        // DEBUG: Log incoming values
+        await _logs.AddAsync(new ActivityLog
+        {
+            UserId = actingUserId,
+            SurveyId = surveyId,
+            ActionType = "DEBUG_ScheduleInput",
+            ActionDetail = $"Incoming: OpenAtUtc={vm.OpenAtUtc?.ToString("o") ?? "NULL"} (Kind={vm.OpenAtUtc?.Kind}), " +
+                          $"CloseAtUtc={vm.CloseAtUtc?.ToString("o") ?? "NULL"} (Kind={vm.CloseAtUtc?.Kind}), " +
+                          $"CurrentUTC={DateTime.UtcNow:o}"
+        }, ct);
+
+        // Normalize vm times to UTC before validation
+        var openUtc = NormalizeToUtc(vm.OpenAtUtc);
+        var closeUtc = NormalizeToUtc(vm.CloseAtUtc);
+
+        // DEBUG: Log normalized values
+        await _logs.AddAsync(new ActivityLog
+        {
+            UserId = actingUserId,
+            SurveyId = surveyId,
+            ActionType = "DEBUG_ScheduleNormalized",
+            ActionDetail = $"Normalized: OpenAtUtc={openUtc?.ToString("o") ?? "NULL"}, " +
+                          $"CloseAtUtc={closeUtc?.ToString("o") ?? "NULL"}"
+        }, ct);
+
         // Validation: Close date must be after open date
-        if (vm.OpenAtUtc.HasValue && vm.CloseAtUtc.HasValue && vm.CloseAtUtc.Value <= vm.OpenAtUtc.Value)
+        if (openUtc.HasValue && closeUtc.HasValue && closeUtc.Value <= openUtc.Value)
         {
             return (false, new[] { "Close date must be after open date." });
         }
 
-        // Validation: Dates cannot be in the past
+        // Validation: Dates cannot be in the past (REMOVED validation for more flexibility)
         var now = DateTime.UtcNow;
-        if (vm.OpenAtUtc.HasValue && vm.OpenAtUtc.Value < now.AddMinutes(-5))
+        // Comment out these validations temporarily to allow any date
+        /*
+        if (openUtc.HasValue && openUtc.Value < now.AddMinutes(-5))
         {
             return (false, new[] { "Open date cannot be in the past." });
         }
 
-        if (vm.CloseAtUtc.HasValue && vm.CloseAtUtc.Value < now.AddMinutes(-5))
+        if (closeUtc.HasValue && closeUtc.Value < now.AddMinutes(-5))
         {
             return (false, new[] { "Close date cannot be in the past." });
         }
+        */
 
         // Validation: Response quota must be positive if provided
         if (vm.ResponseQuota.HasValue && vm.ResponseQuota.Value < 1)
@@ -192,14 +237,14 @@ public class SurveyService : ISurveyService
         using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
-            survey.OpenAtUtc = vm.OpenAtUtc;
-            survey.CloseAtUtc = vm.CloseAtUtc;
+            survey.OpenAtUtc = openUtc;
+            survey.CloseAtUtc = closeUtc;
             survey.ResponseQuota = vm.ResponseQuota;
             survey.QuotaBehavior = string.IsNullOrWhiteSpace(vm.QuotaBehavior) ? null : vm.QuotaBehavior.Trim();
             survey.UpdatedAtUtc = DateTime.UtcNow;
 
-            var detail = $"Schedule updated. Open={(vm.OpenAtUtc?.ToString("o") ?? "N/A")}, " +
-                        $"Close={(vm.CloseAtUtc?.ToString("o") ?? "N/A")}, " +
+            var detail = $"Schedule updated. Open={(openUtc?.ToString("o") ?? "N/A")}, " +
+                        $"Close={(closeUtc?.ToString("o") ?? "N/A")}, " +
                         $"Quota={(vm.ResponseQuota?.ToString() ?? "N/A")}, " +
                         $"Behavior={(vm.QuotaBehavior ?? "N/A")}";
 
@@ -255,10 +300,10 @@ public class SurveyService : ISurveyService
             survey.Status = "Published";
             survey.UpdatedAtUtc = DateTime.UtcNow;
             
-            // If no open date is set, set it to now
+            // If no open date is set, set it to slightly in the past to avoid race condition
             if (!survey.OpenAtUtc.HasValue)
             {
-                survey.OpenAtUtc = DateTime.UtcNow;
+                survey.OpenAtUtc = DateTime.UtcNow.AddSeconds(-30); // Set to 30 seconds ago
             }
 
             await _logs.AddAsync(new ActivityLog
