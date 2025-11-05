@@ -28,6 +28,9 @@
 
     let currentPage = isAnonymous ? 0 : -1; // -1 could be an email/intro page if present
 
+    // Track which questions should be skipped based on branching logic
+    const questionsToSkip = new Set();
+
     // ---------- Utils ----------
     function safeParseJson(text) {
         try { return JSON.parse(text || '[]'); } catch { return []; }
@@ -322,6 +325,35 @@
         return -1;
     }
 
+    // Update skip list based on all answered questions so far
+    function updateSkipList() {
+        questionsToSkip.clear();
+
+        // Check all answered questions for branch logic
+        Array.from(questionPages).forEach((page, pageIdx) => {
+            if (pageIdx > currentPage) return; // Only check answered questions
+
+            const currentQid = page.getAttribute('data-question-id');
+            if (!currentQid) return;
+
+            const answer = getAnswerForQuestion(currentQid);
+            const rulesForQ = branchLogicRules
+                .filter(r => String(r.sourceQuestionId).toLowerCase() === String(currentQid).toLowerCase())
+                .sort((a, b) => (a.priorityOrder ?? 0) - (b.priorityOrder ?? 0));
+
+            for (const rule of rulesForQ) {
+                if (evaluateRule(rule, answer)) {
+                    if (rule.targetAction === 'SkipTo' && rule.targetQuestionId) {
+                        // Mark the target question to be skipped
+                        questionsToSkip.add(String(rule.targetQuestionId).toLowerCase());
+                    }
+                    // Only apply first matching rule
+                    break;
+                }
+            }
+        });
+    }
+
     // Returns next page index or -999 to end survey
     function computeNextPageIndex(currentPageIndex) {
         if (currentPageIndex < 0 || currentPageIndex >= totalPages) return currentPageIndex + 1;
@@ -333,30 +365,53 @@
         // Intro/email page has no question id => go next
         if (!currentQid) return currentPageIndex + 1;
 
+        // Update the skip list based on current answer
         const answer = getAnswerForQuestion(currentQid);
         const rulesForQ = branchLogicRules
             .filter(r => String(r.sourceQuestionId).toLowerCase() === String(currentQid).toLowerCase())
             .sort((a, b) => (a.priorityOrder ?? 0) - (b.priorityOrder ?? 0));
 
+        // Check for immediate actions (EndSurvey, ShowQuestion)
         for (const rule of rulesForQ) {
             if (evaluateRule(rule, answer)) {
                 if (rule.targetAction === 'EndSurvey') {
                     window.surveyEnded = true;
                     return -999;
                 }
-                if (rule.targetAction === 'SkipTo' && rule.targetQuestionId) {
-                    const targetIndex = findPageIndexByQuestionId(rule.targetQuestionId);
-                    if (targetIndex >= 0) return targetIndex;
-                }
                 if (rule.targetAction === 'ShowQuestion' && rule.targetQuestionId) {
-                    // Ensure the target exists; continue to next if not found
                     const tIndex = findPageIndexByQuestionId(rule.targetQuestionId);
                     if (tIndex >= 0) return tIndex;
-                    return currentPageIndex + 1;
                 }
+                // SkipTo is handled by updating the skip list
+                if (rule.targetAction === 'SkipTo' && rule.targetQuestionId) {
+                    questionsToSkip.add(String(rule.targetQuestionId).toLowerCase());
+                }
+                // Only apply first matching rule
+                break;
             }
         }
-        return currentPageIndex + 1;
+
+        // Find next non-skipped page
+        let nextIndex = currentPageIndex + 1;
+        while (nextIndex < totalPages) {
+            const nextPage = questionPages[nextIndex];
+            const nextQid = nextPage?.getAttribute('data-question-id');
+            
+            if (!nextQid) {
+                // No question ID, show this page
+                return nextIndex;
+            }
+
+            // Check if this question should be skipped
+            if (questionsToSkip.has(String(nextQid).toLowerCase())) {
+                nextIndex++;
+                continue;
+            }
+
+            return nextIndex;
+        }
+
+        return nextIndex; // End of survey
     }
 
     // Collect multi-choice hidden values before navigation/submit
@@ -378,6 +433,7 @@
             e.preventDefault();
             if (!validateCurrentPage()) return;
             updateMultiChoiceFields();
+            updateSkipList(); // Update skip list before computing next
 
             const nextIndex = computeNextPageIndex(currentPage);
             if (nextIndex === -999) {
@@ -385,13 +441,29 @@
                 if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
                 return;
             }
-            if (nextIndex >= 0 && nextIndex < totalPages) showPage(nextIndex);
+            if (nextIndex >= 0 && nextIndex < totalPages) {
+                showPage(nextIndex);
+            } else {
+                // Reached end of survey
+                if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+            }
         }
 
         if (target.classList.contains('btn-prev')) {
             e.preventDefault();
-            const prevIndex = Math.max(0, currentPage - 1);
-            showPage(prevIndex);
+            // When going back, find the previous non-skipped page
+            let prevIndex = currentPage - 1;
+            while (prevIndex >= 0) {
+                const prevPage = questionPages[prevIndex];
+                const prevQid = prevPage?.getAttribute('data-question-id');
+                
+                if (!prevQid || !questionsToSkip.has(String(prevQid).toLowerCase())) {
+                    showPage(prevIndex);
+                    return;
+                }
+                prevIndex--;
+            }
+            // If no valid previous page, stay on current
         }
     });
 

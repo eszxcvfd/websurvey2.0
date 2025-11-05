@@ -272,15 +272,19 @@ public class QuestionService : IQuestionService
     {
         if (!vm.QuestionId.HasValue) return (false, new[] { "QuestionId is required." });
 
-        var q = await _questions.GetByIdTrackedAsync(vm.QuestionId.Value, ct);
-        if (q is null) return (false, new[] { "Question not found." });
-
-        var (allowed, error, _) = await _roles.CheckPermissionAsync(actingUserId, q.SurveyId, "EditQuestion", ct);
+        var (allowed, error, _) = await _roles.CheckPermissionAsync(actingUserId, vm.SurveyId, "EditQuestion", ct);
         if (!allowed) return (false, new[] { error ?? "Access denied." });
 
         using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
+            // Load the question with tracking
+            var q = await _db.Questions
+                .Include(q => q.QuestionOptions)
+                .FirstOrDefaultAsync(q => q.QuestionId == vm.QuestionId.Value, ct);
+
+            if (q is null) return (false, new[] { "Question not found." });
+
             q.QuestionText = vm.QuestionText.Trim();
             q.QuestionType = vm.QuestionType.Trim();
             q.IsRequired = vm.IsRequired;
@@ -306,7 +310,7 @@ public class QuestionService : IQuestionService
                     }
                     else
                     {
-                        await _options.AddAsync(new QuestionOption
+                        var newOption = new QuestionOption
                         {
                             OptionId = Guid.NewGuid(),
                             QuestionId = q.QuestionId,
@@ -314,7 +318,8 @@ public class QuestionService : IQuestionService
                             OptionText = p.OptionText.Trim(),
                             OptionValue = string.IsNullOrWhiteSpace(p.OptionValue) ? null : p.OptionValue.Trim(),
                             IsActive = p.IsActive
-                        }, ct);
+                        };
+                        _db.QuestionOptions.Add(newOption);
                     }
                 }
 
@@ -323,7 +328,7 @@ public class QuestionService : IQuestionService
                 {
                     if (!keepIds.Contains(ex.OptionId))
                     {
-                        await _options.RemoveAsync(ex, ct);
+                        _db.QuestionOptions.Remove(ex);
                     }
                 }
             }
@@ -331,9 +336,12 @@ public class QuestionService : IQuestionService
             {
                 foreach (var ex in q.QuestionOptions.ToList())
                 {
-                    await _options.RemoveAsync(ex, ct);
+                    _db.QuestionOptions.Remove(ex);
                 }
             }
+
+            // Save changes before updating branch logics to avoid tracking conflicts
+            await _db.SaveChangesAsync(ct);
 
             // NEW: Update branch logics
             await UpdateBranchLogicsAsync(vm.QuestionId.Value, vm.SurveyId, vm.BranchLogics, ct);
@@ -360,8 +368,11 @@ public class QuestionService : IQuestionService
     // NEW: Helper method to update branch logics
     private async Task UpdateBranchLogicsAsync(Guid questionId, Guid surveyId, List<BranchLogicViewModel> branchLogics, CancellationToken ct)
     {
-        // Get existing branch logics
-        var existingLogics = await _branchLogics.GetBySourceQuestionAsync(questionId, ct);
+        // Get existing branch logics with no tracking to avoid conflicts
+        var existingLogics = await _db.BranchLogics
+            .Where(bl => bl.SourceQuestionId == questionId)
+            .ToListAsync(ct);
+        
         var existingDict = existingLogics.ToDictionary(bl => bl.LogicId);
 
         // Filter valid branch logics (must have ConditionExpr)
@@ -379,7 +390,7 @@ public class QuestionService : IQuestionService
                 existing.TargetAction = blVm.TargetAction.Trim();
                 existing.TargetQuestionId = blVm.TargetQuestionId;
                 existing.PriorityOrder = blVm.PriorityOrder;
-                await _branchLogics.UpdateAsync(existing, ct);
+                // Entity is already tracked, just modify it
             }
             else
             {
@@ -395,7 +406,7 @@ public class QuestionService : IQuestionService
                     PriorityOrder = blVm.PriorityOrder,
                     CreatedAtUtc = DateTime.UtcNow
                 };
-                await _branchLogics.AddAsync(newLogic, ct);
+                _db.BranchLogics.Add(newLogic);
             }
         }
 
@@ -409,7 +420,7 @@ public class QuestionService : IQuestionService
         {
             if (!keepIds.Contains(existing.LogicId))
             {
-                await _branchLogics.RemoveAsync(existing, ct);
+                _db.BranchLogics.Remove(existing);
             }
         }
     }
@@ -430,29 +441,45 @@ public class QuestionService : IQuestionService
         using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
+            // Store the order of deleted question
+            var deletedOrder = q.QuestionOrder;
+            var surveyId = q.SurveyId;
+
+            // Delete options first
             foreach (var op in q.QuestionOptions.ToList())
             {
                 await _options.RemoveAsync(op, ct);
             }
 
+            // Delete the question
             await _questions.RemoveAsync(q, ct);
+
+            // Save changes to commit the deletion
+            await _db.SaveChangesAsync(ct);
+
+            // Bulk update remaining questions using ExecuteUpdateAsync (EF Core 7+)
+            await _db.Questions
+                .Where(quest => quest.SurveyId == surveyId && quest.QuestionOrder > deletedOrder)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(quest => quest.QuestionOrder, quest => quest.QuestionOrder - 1)
+                    .SetProperty(quest => quest.UpdatedAtUtc, DateTime.UtcNow), ct);
 
             await _logs.AddAsync(new ActivityLog
             {
                 UserId = actingUserId,
-                SurveyId = q.SurveyId,
+                SurveyId = surveyId,
                 ActionType = "QuestionDeleted",
-                ActionDetail = $"QID={q.QuestionId}"
+                ActionDetail = $"QID={questionId}"
             }, ct);
 
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return (true, Array.Empty<string>());
         }
-        catch
+        catch (Exception ex)
         {
             await tx.RollbackAsync(ct);
-            return (false, new[] { "Delete question failed." });
+            return (false, new[] { $"Delete question failed: {ex.Message}" });
         }
     }
 
